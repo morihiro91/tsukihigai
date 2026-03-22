@@ -11,7 +11,7 @@ import {
 } from './physics';
 import { getScene } from './scene';
 import { playPlace, playCollapse } from './audio';
-import { clearDebug } from './debug';
+import { clearDebug, getDebugPrefillCount } from './debug';
 
 export type GameState = 'TITLE' | 'PLACING' | 'DROPPING' | 'SETTLING' | 'GAME_OVER';
 
@@ -38,9 +38,8 @@ interface GameData {
 const LANDING_GRACE_PERIOD = 0.5;
 const STABILITY_CHECK_DURATION = 0.4;
 const SETTLE_TIMEOUT = 5.0;
-const FALL_OFF_Y_MARGIN = 0.08;
-/** Shell beyond this XZ distance from center → out of bounds */
-const GROUND_BOUNDARY = 0.25;
+/** Shell fell this far below ground → completely off the konro */
+const FALL_OFF_Y_MARGIN = 0.15;
 const SETTLED_VELOCITY_THRESHOLD = 0.1;
 const SPAWN_HEIGHT_OFFSET = 0.12;
 
@@ -115,8 +114,57 @@ export function startGame() {
   data.selectedPhotoIndex = -1;
   data.highestY = data.groundY;
 
+  // Debug: auto-place N shells at start
+  const prefill = getDebugPrefillCount();
+  if (prefill > 0) {
+    prefillShells(prefill);
+  }
+
   spawnShell();
   setState('PLACING');
+}
+
+/** Instantly stack N shells for debugging */
+function prefillShells(count: number) {
+  for (let i = 0; i < count; i++) {
+    const shell = createShell();
+    const y = data.highestY + shell.params.bulgeHeight * 2 + 0.002;
+
+    const angle = Math.random() * Math.PI * 2;
+    const q = new RAPIER.Quaternion(0, Math.sin(angle / 2), 0, Math.cos(angle / 2));
+    const offsetX = (Math.random() - 0.5) * 0.02;
+    const offsetZ = (Math.random() - 0.5) * 0.02;
+
+    // Switch to dynamic immediately
+    removeRigidBody(shell.rigidBody);
+    const dynBody = createDynamicBody(offsetX, y, offsetZ);
+    dynBody.setRotation(q, true);
+    addCylinderCollider(dynBody, shell.params.radius, shell.params.bulgeHeight);
+    shell.rigidBody = dynBody;
+
+    shell.mesh.position.set(offsetX, y, offsetZ);
+    shell.mesh.quaternion.set(q.x, q.y, q.z, q.w);
+
+    getScene().add(shell.mesh);
+    registerPair(shell.mesh, shell.rigidBody);
+
+    data.shells.push(shell);
+    data.shellCount++;
+    data.highestY = y;
+  }
+
+  // Let physics settle the prefilled shells
+  for (let i = 0; i < 300; i++) {
+    stepPhysics();
+  }
+  syncMeshesToBodies();
+
+  // Update highestY from actual positions
+  data.highestY = data.groundY;
+  for (const shell of data.shells) {
+    const sy = shell.rigidBody.translation().y;
+    if (sy > data.highestY) data.highestY = sy;
+  }
 }
 
 function spawnShell() {
@@ -233,9 +281,8 @@ function bodySpeed(body: RAPIER.RigidBody): number {
 }
 
 /**
- * Check if any shell has left the ground area.
- * - Fell below ground (Y too low)
- * - Rolled/slid off the edge (XZ out of bounds)
+ * Check if any shell has completely fallen off the konro.
+ * Only triggers when the shell drops well below the grill surface.
  */
 function checkFallenOff(): boolean {
   const fallThreshold = data.groundY - FALL_OFF_Y_MARGIN;
@@ -244,11 +291,7 @@ function checkFallenOff(): boolean {
     : data.shells;
 
   for (const shell of allShells) {
-    const pos = shell.rigidBody.translation();
-    // Fell below ground
-    if (pos.y < fallThreshold) return true;
-    // Rolled off the edge (out of ground bounds)
-    if (Math.abs(pos.x) > GROUND_BOUNDARY || Math.abs(pos.z) > GROUND_BOUNDARY) return true;
+    if (shell.rigidBody.translation().y < fallThreshold) return true;
   }
   return false;
 }
@@ -283,17 +326,18 @@ export function updateGame(dt: number) {
   if (data.state === 'DROPPING' || data.state === 'SETTLING') {
     data.settleTimer += dt;
 
+    // Always check if any shell fell off the konro
+    if (checkFallenOff()) {
+      playCollapse();
+      setState('GAME_OVER');
+      return;
+    }
+
     if (data.state === 'DROPPING') {
       if (data.settleTimer > LANDING_GRACE_PERIOD) {
         data.stabilityTimer = 0;
         setState('SETTLING');
       }
-      return;
-    }
-
-    if (checkFallenOff()) {
-      playCollapse();
-      setState('GAME_OVER');
       return;
     }
 

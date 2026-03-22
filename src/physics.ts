@@ -19,9 +19,10 @@ export async function initPhysics() {
   world.timestep = 1 / 120;
 
   // Ground collider (fixed)
+  // Ground collider matches konro grill size (0.25m half-extent)
   const groundDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0);
   const groundBody = world.createRigidBody(groundDesc);
-  const groundColliderDesc = RAPIER.ColliderDesc.cuboid(5, 0.01, 5)
+  const groundColliderDesc = RAPIER.ColliderDesc.cuboid(0.25, 0.01, 0.25)
     .setFriction(0.6)
     .setRestitution(0.02);
   world.createCollider(groundColliderDesc, groundBody);

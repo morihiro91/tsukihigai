@@ -4,6 +4,7 @@ import { getWorld } from './physics';
 import { getGameState } from './game';
 
 let enabled = false;
+let prefillCount = 0;
 let debugMesh: THREE.LineSegments | null = null;
 let hudEl: HTMLDivElement | null = null;
 
@@ -11,10 +12,18 @@ export function isDebugEnabled(): boolean {
   return enabled;
 }
 
+/** Number of shells to auto-place at game start (from ?debug=N) */
+export function getDebugPrefillCount(): number {
+  return prefillCount;
+}
+
 export function initDebug() {
   const params = new URLSearchParams(window.location.search);
   enabled = params.has('debug');
   if (!enabled) return;
+
+  const val = params.get('debug');
+  prefillCount = val ? parseInt(val, 10) || 0 : 0;
 
   hudEl = document.createElement('div');
   hudEl.id = 'debug-hud';
