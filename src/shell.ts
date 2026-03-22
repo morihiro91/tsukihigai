@@ -144,21 +144,23 @@ function createValveMesh(
   const colors = new Float32Array(pos.count * 3);
 
   if (isTop) {
-    const topColor = new THREE.Color(0x8b1a1a);
-    const topColorLight = new THREE.Color(0xc75050);
+    // Top valve (opens upward) = yellowish white (right shell)
+    const color = new THREE.Color(0xfff5e0);
+    const colorEdge = new THREE.Color(0xf0dbb8);
     for (let i = 0; i < pos.count; i++) {
       const dist = Math.sqrt(pos.getX(i) ** 2 + pos.getZ(i) ** 2) / params.radius;
-      const c = topColorLight.clone().lerp(topColor, dist * 0.8);
+      const c = color.clone().lerp(colorEdge, dist * 0.5);
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
     }
   } else {
-    const botColor = new THREE.Color(0xfff5e0);
-    const botColorEdge = new THREE.Color(0xf0dbb8);
+    // Bottom valve (faces down / sits on grill) = deep crimson (left shell)
+    const color = new THREE.Color(0x8b1a1a);
+    const colorLight = new THREE.Color(0xc75050);
     for (let i = 0; i < pos.count; i++) {
       const dist = Math.sqrt(pos.getX(i) ** 2 + pos.getZ(i) ** 2) / params.radius;
-      const c = botColor.clone().lerp(botColorEdge, dist * 0.5);
+      const c = colorLight.clone().lerp(color, dist * 0.8);
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
@@ -195,6 +197,11 @@ export interface Shell {
   openAngle: number;
   targetAngle: number;
   settledTime: number;
+  /** Per-shell random open parameters */
+  willOpen: boolean;
+  openDelay: number;
+  openSpeed: number;
+  maxOpenAngle: number;
   /** Current top-valve collider (recreated as shell opens) */
   topCollider: RAPIER.Collider | null;
   /** Angle at which the top collider was last built */
@@ -233,17 +240,14 @@ export function createShell(): Shell {
     openAngle: 0,
     targetAngle: 0,
     settledTime: 0,
+    willOpen: Math.random() > 0.25,
+    openDelay: 0.5 + Math.random() * 8.0,
+    openSpeed: 0.1 + Math.random() * 0.5,
+    maxOpenAngle: (Math.PI * 0.08) + Math.random() * (Math.PI * 2 / 9 - Math.PI * 0.08),
     topCollider: null,
     colliderAngle: 0,
   };
 }
-
-/** Maximum open angle in radians (~40 degrees) */
-const MAX_OPEN_ANGLE = Math.PI * 0.22;
-/** Time in seconds before the shell starts opening after being placed */
-const OPEN_DELAY = 1.5;
-/** How fast the shell opens (radians per second) */
-const OPEN_SPEED = 0.3;
 
 /** Minimum angle change before rebuilding the top collider */
 const COLLIDER_UPDATE_THRESHOLD = 0.03;
@@ -253,12 +257,14 @@ const COLLIDER_UPDATE_THRESHOLD = 0.03;
  * Call each frame AFTER stepPhysics for settled shells.
  */
 export function updateShellOpen(shell: Shell, dt: number) {
+  if (!shell.willOpen) return;
+
   shell.settledTime += dt;
 
-  if (shell.settledTime > OPEN_DELAY) {
+  if (shell.settledTime > shell.openDelay) {
     shell.targetAngle = Math.min(
-      MAX_OPEN_ANGLE,
-      (shell.settledTime - OPEN_DELAY) * OPEN_SPEED,
+      shell.maxOpenAngle,
+      (shell.settledTime - shell.openDelay) * shell.openSpeed,
     );
   }
 
