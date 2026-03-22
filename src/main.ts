@@ -6,9 +6,8 @@ import { isARAvailable, initARSession, captureARScreenshot } from './ar-session'
 import {
   startGame,
   updateGame,
+  updateWander,
   dropShell,
-  moveShellX,
-  moveShellZ,
   onStateChange,
   addPhoto,
 } from './game';
@@ -21,10 +20,8 @@ let arMode = false;
 async function handleCapture() {
   let dataUrl: string;
   if (arMode) {
-    // XR8 composites camera feed + 3D automatically
     dataUrl = await captureARScreenshot();
   } else {
-    // Desktop: composite camera video + 3D canvas manually
     const canvas = getRenderer().domElement;
     dataUrl = captureDesktopScreenshot(canvas);
   }
@@ -51,8 +48,6 @@ async function init() {
   initUI(
     () => startGame(),
     () => dropShell(),
-    (x) => moveShellX(x),
-    (z) => moveShellZ(z),
     () => handleCapture(),
     arMode,
   );
@@ -70,6 +65,7 @@ async function init() {
     const dt = Math.min((now - lastTime) / 1000, 0.05);
     lastTime = now;
 
+    updateWander(dt);
     updateGame(dt);
     updateDebug();
 

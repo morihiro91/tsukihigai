@@ -126,15 +126,18 @@ function spawnShell() {
   const randomAngle = Math.random() * Math.PI * 2;
   const q = new RAPIER.Quaternion(0, Math.sin(randomAngle / 2), 0, Math.cos(randomAngle / 2));
 
-  shell.rigidBody.setTranslation(new RAPIER.Vector3(0, spawnY, 0), true);
+  const startX = (Math.random() - 0.5) * 0.2;
+  const startZ = (Math.random() - 0.5) * 0.2;
+  shell.rigidBody.setTranslation(new RAPIER.Vector3(startX, spawnY, startZ), true);
   shell.rigidBody.setRotation(q, true);
-  shell.mesh.position.set(0, spawnY, 0);
+  shell.mesh.position.set(startX, spawnY, startZ);
   shell.mesh.quaternion.set(q.x, q.y, q.z, q.w);
 
   getScene().add(shell.mesh);
   registerPair(shell.mesh, shell.rigidBody);
 
   data.currentShell = shell;
+  resetWander();
 }
 
 export function dropShell() {
@@ -165,21 +168,62 @@ export function dropShell() {
   setState('DROPPING');
 }
 
-export function moveShellX(offsetX: number) {
-  if (data.state !== 'PLACING' || !data.currentShell) return;
-  const clampedX = Math.max(-0.1, Math.min(0.1, offsetX));
-  const pos = data.currentShell.rigidBody.translation();
-  data.currentShell.rigidBody.setNextKinematicTranslation(
-    new RAPIER.Vector3(clampedX, pos.y, pos.z),
-  );
+/** Random wandering state — multiple overlapping waves for unpredictable motion */
+const wander = {
+  // Primary wave
+  angleX1: 0, angleZ1: 0,
+  speedX1: 0, speedZ1: 0,
+  // Secondary wave (different frequency for irregularity)
+  angleX2: 0, angleZ2: 0,
+  speedX2: 0, speedZ2: 0,
+  // Slow drift
+  angleX3: 0, angleZ3: 0,
+  speedX3: 0, speedZ3: 0,
+  range: 0.22,
+};
+
+/** Randomize wander parameters for a new shell */
+function resetWander() {
+  wander.angleX1 = Math.random() * Math.PI * 2;
+  wander.angleZ1 = Math.random() * Math.PI * 2;
+  wander.speedX1 = 0.8 + Math.random() * 0.8;
+  wander.speedZ1 = 0.9 + Math.random() * 0.7;
+  wander.angleX2 = Math.random() * Math.PI * 2;
+  wander.angleZ2 = Math.random() * Math.PI * 2;
+  wander.speedX2 = 1.8 + Math.random() * 1.5;
+  wander.speedZ2 = 2.0 + Math.random() * 1.3;
+  wander.angleX3 = Math.random() * Math.PI * 2;
+  wander.angleZ3 = Math.random() * Math.PI * 2;
+  wander.speedX3 = 0.2 + Math.random() * 0.3;
+  wander.speedZ3 = 0.15 + Math.random() * 0.25;
 }
 
-export function moveShellZ(offsetZ: number) {
+/** Update XZ wander position each frame */
+export function updateWander(dt: number) {
   if (data.state !== 'PLACING' || !data.currentShell) return;
-  const clampedZ = Math.max(-0.1, Math.min(0.1, offsetZ));
+
+  wander.angleX1 += wander.speedX1 * dt;
+  wander.angleZ1 += wander.speedZ1 * dt;
+  wander.angleX2 += wander.speedX2 * dt;
+  wander.angleZ2 += wander.speedZ2 * dt;
+  wander.angleX3 += wander.speedX3 * dt;
+  wander.angleZ3 += wander.speedZ3 * dt;
+
+  // Combine waves: primary + secondary (smaller) + slow drift
+  const x = (
+    Math.sin(wander.angleX1) * 0.55 +
+    Math.sin(wander.angleX2) * 0.25 +
+    Math.sin(wander.angleX3) * 0.20
+  ) * wander.range;
+  const z = (
+    Math.sin(wander.angleZ1) * 0.55 +
+    Math.sin(wander.angleZ2) * 0.25 +
+    Math.sin(wander.angleZ3) * 0.20
+  ) * wander.range;
+
   const pos = data.currentShell.rigidBody.translation();
   data.currentShell.rigidBody.setNextKinematicTranslation(
-    new RAPIER.Vector3(pos.x, pos.y, clampedZ),
+    new RAPIER.Vector3(x, pos.y, z),
   );
 }
 

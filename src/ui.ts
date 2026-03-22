@@ -1,26 +1,20 @@
-import { GameState, CapturedPhoto, getPhotos, getSelectedPhoto, setSelectedPhotoIndex } from './game';
+import { GameState, getPhotos, getSelectedPhoto, setSelectedPhotoIndex } from './game';
 import { shareWithPhoto, downloadPhoto } from './share';
 
 let uiRoot: HTMLElement;
 let onStartCallback: (() => void) | null = null;
 let onDropCallback: (() => void) | null = null;
-let onMoveXCallback: ((x: number) => void) | null = null;
-let onMoveZCallback: ((z: number) => void) | null = null;
 let onCaptureCallback: (() => void) | null = null;
 
 export function initUI(
   onStart: () => void,
   onDrop: () => void,
-  onMoveX: (x: number) => void,
-  onMoveZ: (z: number) => void,
   onCapture: () => void,
   isAR: boolean,
 ) {
   uiRoot = document.getElementById('ui-root')!;
   onStartCallback = onStart;
   onDropCallback = onDrop;
-  onMoveXCallback = onMoveX;
-  onMoveZCallback = onMoveZ;
   onCaptureCallback = onCapture;
 
   showTitleScreen(isAR);
@@ -73,10 +67,8 @@ function showHUD(shellCount: number, photoCount: number) {
   captureBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     onCaptureCallback?.();
-    // Flash effect
     captureBtn.classList.add('flash');
     setTimeout(() => captureBtn.classList.remove('flash'), 300);
-    // Update badge
     const badge = captureBtn.querySelector('.capture-badge');
     const newCount = photoCount + 1;
     if (badge) {
@@ -90,27 +82,6 @@ function showHUD(shellCount: number, photoCount: number) {
   });
   uiRoot.appendChild(captureBtn);
 
-  // Position controls
-  const controls = document.createElement('div');
-  controls.className = 'position-controls';
-  controls.innerHTML = `
-    <label>← よこ →</label>
-    <input type="range" id="slider-x" min="-100" max="100" value="0" />
-    <label>← おく →</label>
-    <input type="range" id="slider-z" min="-100" max="100" value="0" />
-  `;
-  uiRoot.appendChild(controls);
-
-  const sliderX = controls.querySelector('#slider-x') as HTMLInputElement;
-  const sliderZ = controls.querySelector('#slider-z') as HTMLInputElement;
-
-  sliderX.addEventListener('input', () => {
-    onMoveXCallback?.(parseInt(sliderX.value) / 1000);
-  });
-  sliderZ.addEventListener('input', () => {
-    onMoveZCallback?.(parseInt(sliderZ.value) / 1000);
-  });
-
   // Tap hint
   const hint = document.createElement('div');
   hint.className = 'tap-hint';
@@ -121,7 +92,7 @@ function showHUD(shellCount: number, photoCount: number) {
   const canvas = document.getElementById('game-canvas')!;
   const dropHandler = (e: Event) => {
     const target = e.target as HTMLElement;
-    if (target.closest('.position-controls') || target.closest('.btn-capture')) return;
+    if (target.closest('.btn-capture')) return;
     onDropCallback?.();
     canvas.removeEventListener('click', dropHandler);
     canvas.removeEventListener('touchend', dropHandler);
@@ -163,14 +134,13 @@ function showGameOver(shellCount: number, isAR: boolean) {
     `}
 
     <div class="btn-group">
-      <button class="btn btn-primary" id="btn-share" ${photos.length === 0 ? '' : ''}>共有する</button>
+      <button class="btn btn-primary" id="btn-share">共有する</button>
       ${photos.length > 0 ? '<button class="btn btn-secondary" id="btn-download">画像保存</button>' : ''}
       <button class="btn btn-secondary" id="btn-retry">もう一度</button>
     </div>
   `;
   uiRoot.appendChild(div);
 
-  // Photo thumbnail selection
   const thumbnails = div.querySelector('#photo-thumbnails');
   if (thumbnails) {
     thumbnails.addEventListener('click', (e) => {
@@ -180,11 +150,9 @@ function showGameOver(shellCount: number, isAR: boolean) {
       const index = parseInt(thumb.dataset.index!);
       setSelectedPhotoIndex(index);
 
-      // Update selected state
       thumbnails.querySelectorAll('.photo-thumb').forEach(t => t.classList.remove('selected'));
       thumb.classList.add('selected');
 
-      // Update preview
       const photo = photos[index];
       const selectedImg = div.querySelector('#selected-photo') as HTMLImageElement;
       const badge = div.querySelector('.photo-count-badge')!;
@@ -217,7 +185,6 @@ export function updateUI(state: GameState, shellCount: number, isAR: boolean) {
       const countEl = document.getElementById('shell-count');
       if (countEl) countEl.textContent = String(shellCount);
       document.querySelector('.tap-hint')?.remove();
-      document.querySelector('.position-controls')?.remove();
       break;
     }
     case 'GAME_OVER':

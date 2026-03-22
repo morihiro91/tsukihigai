@@ -50,9 +50,9 @@ export async function initDesktopSession() {
     roughness: 0.4,
     metalness: 0.8,
   });
-  const rodCount = 12;
+  const rodCount = 28;
   const rodSpacing = (grillSize * 2 - 0.02) / (rodCount - 1);
-  const rodRadius = 0.0025;
+  const rodRadius = 0.0018;
   for (let i = 0; i < rodCount; i++) {
     const rodGeom = new THREE.CylinderGeometry(rodRadius, rodRadius, grillSize * 2 - 0.02, 6);
     rodGeom.rotateZ(Math.PI / 2);
@@ -61,12 +61,14 @@ export async function initDesktopSession() {
     rod.castShadow = true;
     grillGroup.add(rod);
   }
-  // Cross rods (2 perpendicular support bars)
-  for (const offset of [-grillSize * 0.5, grillSize * 0.5]) {
-    const crossGeom = new THREE.CylinderGeometry(rodRadius * 1.2, rodRadius * 1.2, grillSize * 2 - 0.02, 6);
+  // Cross rods (perpendicular, same density as main rods)
+  const crossCount = rodCount;
+  const crossSpacing = (grillSize * 2 - 0.02) / (crossCount - 1);
+  for (let i = 0; i < crossCount; i++) {
+    const crossGeom = new THREE.CylinderGeometry(rodRadius, rodRadius, grillSize * 2 - 0.02, 6);
     crossGeom.rotateX(Math.PI / 2);
     const cross = new THREE.Mesh(crossGeom, rodMat);
-    cross.position.set(offset, -0.001, 0);
+    cross.position.set(-grillSize + 0.01 + i * crossSpacing, -0.001, 0);
     grillGroup.add(cross);
   }
 
