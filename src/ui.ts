@@ -1,5 +1,5 @@
 import { GameState, getPhotos, getSelectedPhoto, setSelectedPhotoIndex } from './game';
-import { shareWithPhoto, downloadPhoto } from './share';
+import { shareNative, shareToX, shareToLINE, shareToFacebook, downloadPhoto } from './share';
 
 let uiRoot: HTMLElement;
 let onStartCallback: (() => void) | null = null;
@@ -133,8 +133,21 @@ function showGameOver(shellCount: number, isAR: boolean) {
       <p class="no-photo-hint">次回はカメラボタンで撮影してみよう</p>
     `}
 
+    <div class="share-buttons">
+      <button class="btn-sns btn-x" id="btn-x" title="X (Twitter)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      </button>
+      <button class="btn-sns btn-line" id="btn-line" title="LINE">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 5.82 2 10.5c0 3.69 3.03 6.84 7.27 7.87.28.06.66.19.76.43.09.22.06.56.03.78l-.12.74c-.04.22-.17.87.76.47.93-.4 5.02-2.96 6.85-5.07C19.47 13.56 22 11.73 22 10.5 22 5.82 17.52 2 12 2z"/></svg>
+      </button>
+      <button class="btn-sns btn-fb" id="btn-fb" title="Facebook">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+      </button>
+      <button class="btn-sns btn-share-native" id="btn-share-native" title="その他">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      </button>
+    </div>
     <div class="btn-group">
-      <button class="btn btn-primary" id="btn-share">共有する</button>
       ${photos.length > 0 ? '<button class="btn btn-secondary" id="btn-download">画像保存</button>' : ''}
       <button class="btn btn-secondary" id="btn-retry">もう一度</button>
     </div>
@@ -161,8 +174,17 @@ function showGameOver(shellCount: number, isAR: boolean) {
     });
   }
 
-  div.querySelector('#btn-share')!.addEventListener('click', () => {
-    shareWithPhoto(getSelectedPhoto());
+  div.querySelector('#btn-x')!.addEventListener('click', () => {
+    shareToX(getSelectedPhoto());
+  });
+  div.querySelector('#btn-line')!.addEventListener('click', () => {
+    shareToLINE(getSelectedPhoto());
+  });
+  div.querySelector('#btn-fb')!.addEventListener('click', () => {
+    shareToFacebook(getSelectedPhoto());
+  });
+  div.querySelector('#btn-share-native')!.addEventListener('click', () => {
+    shareNative(getSelectedPhoto());
   });
   div.querySelector('#btn-download')?.addEventListener('click', () => {
     downloadPhoto(getSelectedPhoto());

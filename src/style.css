@@ -310,6 +310,51 @@ body {
   margin-bottom: 1.5rem;
 }
 
+.share-buttons {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.btn-sns {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, opacity 0.15s;
+  pointer-events: auto;
+}
+
+.btn-sns:active {
+  transform: scale(0.9);
+}
+
+.btn-x {
+  background: #000;
+  color: #fff;
+}
+
+.btn-line {
+  background: #06c755;
+  color: #fff;
+}
+
+.btn-fb {
+  background: #1877f2;
+  color: #fff;
+}
+
+.btn-share-native {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
 .gameover-screen .btn-group {
   display: flex;
   gap: 0.8rem;
