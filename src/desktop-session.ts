@@ -4,120 +4,51 @@ import { getScene, getCamera, getRenderer } from './scene';
 
 let controls: OrbitControls;
 let videoElement: HTMLVideoElement | null = null;
+let useDeviceOrientation = false;
+let orientationAlpha = 0;
+let orientationBeta = 0;
+let orientationGamma = 0;
 
 export async function initDesktopSession() {
-  const scene = getScene();
   const camera = getCamera();
   const renderer = getRenderer();
 
-  // Start camera feed as background
   await startCameraBackground();
 
-  // BBQ grill / konro
-  const grillGroup = new THREE.Group();
-
-  const grillSize = 0.18;
-  const grillHeight = 0.08;
-  const wallThickness = 0.012;
-
-  // Outer body (dark metal box)
-  const bodyGeom = new THREE.BoxGeometry(grillSize * 2 + wallThickness * 2, grillHeight, grillSize * 2 + wallThickness * 2);
-  const bodyMat = new THREE.MeshStandardMaterial({
-    color: 0x2a2a2a,
-    roughness: 0.7,
-    metalness: 0.6,
-  });
-  const body = new THREE.Mesh(bodyGeom, bodyMat);
-  body.position.y = -grillHeight / 2;
-  body.castShadow = true;
-  body.receiveShadow = true;
-  grillGroup.add(body);
-
-  // Inner cavity (slightly recessed, dark)
-  const innerGeom = new THREE.BoxGeometry(grillSize * 2 - 0.01, grillHeight - 0.01, grillSize * 2 - 0.01);
-  const innerMat = new THREE.MeshStandardMaterial({
-    color: 0x111111,
-    roughness: 0.9,
-    metalness: 0.2,
-  });
-  const inner = new THREE.Mesh(innerGeom, innerMat);
-  inner.position.y = -grillHeight / 2 + 0.005;
-  grillGroup.add(inner);
-
-  // Grill grate (metal rods)
-  const rodMat = new THREE.MeshStandardMaterial({
-    color: 0x888888,
-    roughness: 0.4,
-    metalness: 0.8,
-  });
-  const rodCount = 28;
-  const rodSpacing = (grillSize * 2 - 0.02) / (rodCount - 1);
-  const rodRadius = 0.0018;
-  for (let i = 0; i < rodCount; i++) {
-    const rodGeom = new THREE.CylinderGeometry(rodRadius, rodRadius, grillSize * 2 - 0.02, 6);
-    rodGeom.rotateZ(Math.PI / 2);
-    const rod = new THREE.Mesh(rodGeom, rodMat);
-    rod.position.set(0, 0.001, -grillSize + 0.01 + i * rodSpacing);
-    rod.castShadow = true;
-    grillGroup.add(rod);
+  // Try device orientation for mobile (AR-like camera control)
+  if (window.DeviceOrientationEvent) {
+    try {
+      // iOS 13+ requires permission
+      const doe = DeviceOrientationEvent as any;
+      if (typeof doe.requestPermission === 'function') {
+        const permission = await doe.requestPermission();
+        if (permission === 'granted') {
+          enableDeviceOrientation();
+        } else {
+          setupOrbitControls(camera, renderer);
+        }
+      } else {
+        // Android or older iOS — just listen
+        enableDeviceOrientation();
+      }
+    } catch {
+      setupOrbitControls(camera, renderer);
+    }
+  } else {
+    setupOrbitControls(camera, renderer);
   }
-  // Cross rods (perpendicular, same density as main rods)
-  const crossCount = rodCount;
-  const crossSpacing = (grillSize * 2 - 0.02) / (crossCount - 1);
-  for (let i = 0; i < crossCount; i++) {
-    const crossGeom = new THREE.CylinderGeometry(rodRadius, rodRadius, grillSize * 2 - 0.02, 6);
-    crossGeom.rotateX(Math.PI / 2);
-    const cross = new THREE.Mesh(crossGeom, rodMat);
-    cross.position.set(-grillSize + 0.01 + i * crossSpacing, -0.001, 0);
-    grillGroup.add(cross);
-  }
+}
 
-  // Rim / lip (top edge)
-  const rimMat = new THREE.MeshStandardMaterial({
-    color: 0x444444,
-    roughness: 0.5,
-    metalness: 0.7,
+function enableDeviceOrientation() {
+  useDeviceOrientation = true;
+  window.addEventListener('deviceorientation', (e) => {
+    orientationAlpha = e.alpha ?? 0;
+    orientationBeta = e.beta ?? 0;
+    orientationGamma = e.gamma ?? 0;
   });
-  const rimWidth = 0.015;
-  const rimThick = 0.008;
-  const fullW = grillSize * 2 + wallThickness * 2;
-  // 4 rim pieces
-  for (const [sx, sz, rw, rd] of [
-    [0, -grillSize - wallThickness, fullW, rimWidth],
-    [0,  grillSize + wallThickness, fullW, rimWidth],
-    [-grillSize - wallThickness, 0, rimWidth, fullW - rimWidth * 2],
-    [ grillSize + wallThickness, 0, rimWidth, fullW - rimWidth * 2],
-  ] as [number, number, number, number][]) {
-    const rimGeom = new THREE.BoxGeometry(rw, rimThick, rd);
-    const rim = new THREE.Mesh(rimGeom, rimMat);
-    rim.position.set(sx, rimThick / 2, sz);
-    grillGroup.add(rim);
-  }
+}
 
-  // Warm glow light inside konro
-  const coalLight = new THREE.PointLight(0xff4400, 0.3, 0.4);
-  coalLight.position.set(0, -0.03, 0);
-  grillGroup.add(coalLight);
-
-  // Small legs
-  const legMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.5 });
-  const legPositions = [
-    [-grillSize - 0.005, -grillSize - 0.005],
-    [ grillSize + 0.005, -grillSize - 0.005],
-    [-grillSize - 0.005,  grillSize + 0.005],
-    [ grillSize + 0.005,  grillSize + 0.005],
-  ];
-  for (const [lx, lz] of legPositions) {
-    const legGeom = new THREE.CylinderGeometry(0.006, 0.006, 0.04, 8);
-    const leg = new THREE.Mesh(legGeom, legMat);
-    leg.position.set(lx, -grillHeight - 0.02, lz);
-    leg.castShadow = true;
-    grillGroup.add(leg);
-  }
-
-  scene.add(grillGroup);
-
-  // Orbit controls
+function setupOrbitControls(camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer) {
   controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0.1, 0);
   controls.enableDamping = true;
@@ -152,35 +83,52 @@ async function startCameraBackground() {
       height: 100vh;
       object-fit: cover;
       z-index: -1;
-      transform: scaleX(-1);
     `;
     document.body.prepend(videoElement);
     await videoElement.play();
   } catch (err) {
     console.warn('Camera not available, using fallback background:', err);
-    // If camera fails, set a gradient background on body
     document.body.style.background = 'linear-gradient(180deg, #87ceeb 0%, #e0c9a6 100%)';
   }
 }
 
 export function updateDesktopControls() {
-  controls?.update();
+  if (useDeviceOrientation) {
+    updateDeviceOrientationCamera();
+  } else {
+    controls?.update();
+  }
+}
+
+function updateDeviceOrientationCamera() {
+  const camera = getCamera();
+  // Convert device orientation to camera rotation
+  // beta: front-back tilt (-180..180), gamma: left-right tilt (-90..90)
+  const beta = THREE.MathUtils.degToRad(orientationBeta);
+  const gamma = THREE.MathUtils.degToRad(orientationGamma);
+
+  // Camera orbits around origin based on device tilt
+  const distance = 0.5;
+  // beta ~90 = phone upright looking forward, beta ~45 = tilted looking down
+  const phi = Math.max(0.3, Math.min(Math.PI / 2 - 0.05, Math.PI / 2 - (beta - Math.PI / 4)));
+  const theta = -gamma * 1.5;
+
+  camera.position.set(
+    distance * Math.sin(phi) * Math.sin(theta),
+    distance * Math.cos(phi) + 0.1,
+    distance * Math.sin(phi) * Math.cos(theta),
+  );
+  camera.lookAt(0, 0.05, 0);
 }
 
 export function captureDesktopScreenshot(canvas: HTMLCanvasElement): string {
-  // Composite camera feed + 3D canvas into one image
   const compositeCanvas = document.createElement('canvas');
   compositeCanvas.width = canvas.width;
   compositeCanvas.height = canvas.height;
   const ctx = compositeCanvas.getContext('2d')!;
 
-  // Draw camera feed first
   if (videoElement && videoElement.readyState >= 2) {
     ctx.save();
-    // Mirror to match the CSS transform
-    ctx.translate(compositeCanvas.width, 0);
-    ctx.scale(-1, 1);
-    // Cover the canvas area
     const vw = videoElement.videoWidth;
     const vh = videoElement.videoHeight;
     const canvasAspect = compositeCanvas.width / compositeCanvas.height;
@@ -197,8 +145,6 @@ export function captureDesktopScreenshot(canvas: HTMLCanvasElement): string {
     ctx.restore();
   }
 
-  // Draw 3D canvas on top
   ctx.drawImage(canvas, 0, 0);
-
   return compositeCanvas.toDataURL('image/png');
 }

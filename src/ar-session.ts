@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { getScene, getCamera, getRenderer } from './scene';
+import { createGrill, placeGrill } from './grill';
 
 declare global {
   interface Window {
@@ -12,16 +13,16 @@ let arActive = false;
 let surfacePlaced = false;
 let planeFound = false;
 let anchorPosition = new THREE.Vector3();
-let reticle: THREE.Mesh | null = null;
-let onSurfaceTapCallback: ((x: number, y: number, z: number) => void) | null = null;
+let reticle: THREE.Group | null = null;
+let onSurfacePlacedCallback: ((x: number, y: number, z: number) => void) | null = null;
 let onPlaneFoundCallback: (() => void) | null = null;
 
 export function isARAvailable(): boolean {
   return typeof window.XR8 !== 'undefined';
 }
 
-export function onSurfaceTap(cb: (x: number, y: number, z: number) => void) {
-  onSurfaceTapCallback = cb;
+export function onSurfacePlaced(cb: (x: number, y: number, z: number) => void) {
+  onSurfacePlacedCallback = cb;
 }
 
 export function onPlaneFound(cb: () => void) {
@@ -40,18 +41,36 @@ export function getAnchorPosition(): THREE.Vector3 {
   return anchorPosition.clone();
 }
 
-function createReticle(): THREE.Mesh {
-  const ring = new THREE.RingGeometry(0.06, 0.08, 32);
-  const mat = new THREE.MeshBasicMaterial({
-    color: 0x00ff88,
-    side: THREE.DoubleSide,
-    transparent: true,
-    opacity: 0.8,
-  });
-  const mesh = new THREE.Mesh(ring, mat);
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.visible = false;
-  return mesh;
+function createReticle(): THREE.Group {
+  const group = new THREE.Group();
+
+  // Ring indicator
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.08, 0.1, 32),
+    new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide, transparent: true, opacity: 0.7 }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  group.add(ring);
+
+  // Animated inner dot
+  const dot = new THREE.Mesh(
+    new THREE.CircleGeometry(0.02, 16),
+    new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide, transparent: true, opacity: 0.9 }),
+  );
+  dot.rotation.x = -Math.PI / 2;
+  group.add(dot);
+
+  // Shadow circle to preview grill placement
+  const shadow = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.4, 0.4),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.15, side: THREE.DoubleSide }),
+  );
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = 0.001;
+  group.add(shadow);
+
+  group.visible = false;
+  return group;
 }
 
 export function initARSession() {
@@ -66,7 +85,7 @@ export function initARSession() {
 
   const canvas = renderer.domElement;
 
-  // Reticle for plane visualization
+  // Reticle for surface preview
   reticle = createReticle();
   scene.add(reticle);
 
@@ -84,18 +103,12 @@ export function initARSession() {
     {
       name: 'tsukihigai-ar',
       listeners: [
-        // Listen for plane detection events from XrController
         {
           event: 'reality.projectwaypoint',
           process: ({ detail }: any) => {
-            // Ground plane waypoint detected — update reticle position
             if (!surfacePlaced && reticle && detail.position) {
               reticle.visible = true;
-              reticle.position.set(
-                detail.position.x,
-                detail.position.y,
-                detail.position.z,
-              );
+              reticle.position.set(detail.position.x, detail.position.y, detail.position.z);
               if (!planeFound) {
                 planeFound = true;
                 onPlaneFoundCallback?.();
@@ -112,10 +125,8 @@ export function initARSession() {
       onUpdate: ({ processCpuResult }: any) => {
         if (!processCpuResult) return;
 
-        // --- Plane detection from reality data ---
         const { reality } = processCpuResult;
         if (reality) {
-          // Detected planes (horizontal surfaces)
           if (reality.detectedPlanes && reality.detectedPlanes.length > 0) {
             if (!planeFound) {
               planeFound = true;
@@ -123,7 +134,7 @@ export function initARSession() {
             }
           }
 
-          // Update reticle from screen center hit test if not yet placed
+          // Update reticle position from screen center hit test
           if (!surfacePlaced && reticle) {
             const hits = XR8.XrController.hitTest(0.5, 0.5, ['GROUND_PLANE', 'FEATURE_POINT']);
             if (hits.length > 0) {
@@ -137,7 +148,7 @@ export function initARSession() {
             }
           }
 
-          // Camera-based lighting estimation
+          // Camera-based lighting
           if (reality.lighting) {
             const dirLight = scene.getObjectByName('ar-dirlight') as THREE.DirectionalLight;
             if (dirLight) {
@@ -174,7 +185,6 @@ function performHitTest(screenX: number, screenY: number) {
   const XR8 = window.XR8;
   const x = screenX / window.innerWidth;
   const y = screenY / window.innerHeight;
-  // Prioritize GROUND_PLANE (detected planes), then fall back to feature points
   const hits = XR8.XrController.hitTest(x, y, ['GROUND_PLANE', 'FEATURE_POINT']);
   return hits.length > 0 ? hits[0] : null;
 }
@@ -193,22 +203,25 @@ function handleARInput(screenX: number, screenY: number) {
   const target = document.elementFromPoint(screenX, screenY);
   if (target && target.closest('#ui-root')) return;
 
-  // Require plane detection before placing
   if (!planeFound) return;
 
-  const hit = performHitTest(screenX, screenY);
-  if (!hit) return;
-
-  const pos = hit.position;
   if (!surfacePlaced) {
-    // Anchor the game surface on detected plane
+    // Use reticle position (screen center hit test) for placement
+    const hit = performHitTest(screenX, screenY);
+    if (!hit) return;
+
+    const pos = hit.position;
     anchorPosition.set(pos.x, pos.y, pos.z);
     surfacePlaced = true;
-    // Hide reticle after placement
+
+    // Hide reticle
     if (reticle) reticle.visible = false;
-    onSurfaceTapCallback?.(pos.x, pos.y, pos.z);
-  } else {
-    onSurfaceTapCallback?.(pos.x, pos.y, pos.z);
+
+    // Place the grill at the detected surface
+    createGrill();
+    placeGrill(pos.x, pos.y, pos.z);
+
+    onSurfacePlacedCallback?.(pos.x, pos.y, pos.z);
   }
 }
 

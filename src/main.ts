@@ -2,18 +2,20 @@ import './style.css';
 import { initScene, getRenderer, getScene, getCamera } from './scene';
 import { initPhysics } from './physics';
 import { initDesktopSession, updateDesktopControls, captureDesktopScreenshot } from './desktop-session';
-import { isARAvailable, initARSession, captureARScreenshot } from './ar-session';
+import { isARAvailable, initARSession, captureARScreenshot, onSurfacePlaced } from './ar-session';
 import {
   startGame,
   updateGame,
   dropShell,
   onStateChange,
   addPhoto,
+  setGroundY,
 } from './game';
 import { initUI, updateUI, showCaptureFlash } from './ui';
 import { initAudio } from './audio';
 import { initDebug, updateDebug } from './debug';
 import { initSmoke, updateSmoke } from './smoke';
+import { createGrill } from './grill';
 
 let arMode = false;
 
@@ -42,8 +44,14 @@ async function init() {
 
   if (arMode) {
     initARSession();
+    // In AR mode, grill is placed when surface is tapped
+    onSurfacePlaced((x, y, z) => {
+      setGroundY(y);
+    });
   } else {
     await initDesktopSession();
+    // In desktop mode, create grill immediately at origin
+    createGrill();
   }
 
   initUI(
