@@ -14,6 +14,7 @@ import {
 import { initUI, updateUI, showCaptureFlash } from './ui';
 import { initAudio } from './audio';
 import { initDebug, updateDebug } from './debug';
+import { initSmoke, updateSmoke } from './smoke';
 
 let arMode = false;
 
@@ -36,6 +37,7 @@ async function init() {
   await initPhysics();
   initAudio();
   initDebug();
+  initSmoke();
 
   arMode = isARAvailable();
 
@@ -65,6 +67,7 @@ async function init() {
     const dt = Math.min((now - lastTime) / 1000, 0.05);
     lastTime = now;
 
+    updateSmoke(dt);
     updateWander(dt);
     updateGame(dt);
     updateDebug();
