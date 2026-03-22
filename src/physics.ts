@@ -57,12 +57,37 @@ export function addCylinderCollider(
   body: RAPIER.RigidBody,
   radius: number,
   halfHeight: number,
+  translation?: { x: number; y: number; z: number },
 ): RAPIER.Collider {
   const desc = RAPIER.ColliderDesc.cylinder(halfHeight, radius)
     .setFriction(0.5)
     .setRestitution(0.01)
     .setDensity(800);
+  if (translation) {
+    desc.setTranslation(translation.x, translation.y, translation.z);
+  }
   return world.createCollider(desc, body);
+}
+
+
+export function addCylinderColliderWithRotation(
+  body: RAPIER.RigidBody,
+  radius: number,
+  halfHeight: number,
+  translation: { x: number; y: number; z: number },
+  rotation: { x: number; y: number; z: number; w: number },
+): RAPIER.Collider {
+  const desc = RAPIER.ColliderDesc.cylinder(halfHeight, radius)
+    .setFriction(0.5)
+    .setRestitution(0.01)
+    .setDensity(800)
+    .setTranslation(translation.x, translation.y, translation.z)
+    .setRotation(rotation);
+  return world.createCollider(desc, body);
+}
+
+export function removeCollider(collider: RAPIER.Collider) {
+  world.removeCollider(collider, true);
 }
 
 export function removeRigidBody(body: RAPIER.RigidBody) {

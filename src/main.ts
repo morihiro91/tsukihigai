@@ -6,7 +6,6 @@ import { isARAvailable, initARSession, captureARScreenshot } from './ar-session'
 import {
   startGame,
   updateGame,
-  updateWander,
   dropShell,
   onStateChange,
   addPhoto,
@@ -68,7 +67,6 @@ async function init() {
     lastTime = now;
 
     updateSmoke(dt);
-    updateWander(dt);
     updateGame(dt);
     updateDebug();
 

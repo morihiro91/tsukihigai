@@ -3,16 +3,14 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import {
   createKinematicBody,
   addCylinderCollider,
+  addCylinderColliderWithRotation,
+  removeCollider,
 } from './physics';
 
 interface ShellParams {
-  /** Shell radius (half of shell length) in meters. Real: ~60mm */
   radius: number;
-  /** Maximum height of the shell bulge. Real shells are shallow */
   bulgeHeight: number;
-  /** Small ear-like projection size */
   earSize: number;
-  /** Subtle size variation per shell */
   scale: number;
 }
 
@@ -21,7 +19,7 @@ function randomInRange(min: number, max: number): number {
 }
 
 function generateParams(): ShellParams {
-  const scale = randomInRange(0.6, 1.8);
+  const scale = randomInRange(0.6, 1.6);
   return {
     radius: 0.045 * scale,
     bulgeHeight: 0.008 * scale,
@@ -30,11 +28,6 @@ function generateParams(): ShellParams {
   };
 }
 
-/**
- * Creates a single valve (half shell) of a Tsukihigai.
- * Nearly circular disc with a gentle dome-like bulge peaking at the umbo (hinge).
- * Surface is smooth with only faint concentric growth lines.
- */
 function createValveGeometry(
   params: ShellParams,
   isTop: boolean,
@@ -48,7 +41,6 @@ function createValveGeometry(
   const uvs: number[] = [];
   const indices: number[] = [];
 
-  // Center vertex (umbo / hinge point — the peak)
   vertices.push(0, sign * bulgeHeight, 0);
   uvs.push(0.5, 0.5);
 
@@ -58,10 +50,8 @@ function createValveGeometry(
 
     for (let ri = 0; ri < radialSegments; ri++) {
       const angle = (ri / radialSegments) * Math.PI * 2;
-
       const x = r * Math.cos(angle);
       const z = r * Math.sin(angle);
-
       const dome = bulgeHeight * Math.cos((t * Math.PI) / 2) ** 1.8;
       const growthLine = Math.sin(t * Math.PI * 30) * 0.0002 * t;
       const y = sign * (dome + growthLine);
@@ -74,7 +64,6 @@ function createValveGeometry(
     }
   }
 
-  // Ear projections
   const earBaseAngle = Math.PI / 2;
   for (const side of [-1, 1]) {
     const earAngle = earBaseAngle + side * 0.3;
@@ -87,7 +76,6 @@ function createValveGeometry(
   const earLeftIdx = 1 + concentricSegments * radialSegments;
   const earRightIdx = earLeftIdx + 1;
 
-  // Triangles: center to first ring
   for (let ri = 0; ri < radialSegments; ri++) {
     const next = (ri + 1) % radialSegments;
     if (isTop) {
@@ -97,7 +85,6 @@ function createValveGeometry(
     }
   }
 
-  // Triangles: ring to ring
   for (let ci = 1; ci < concentricSegments; ci++) {
     const ringStart = 1 + (ci - 1) * radialSegments;
     const nextRingStart = 1 + ci * radialSegments;
@@ -117,7 +104,6 @@ function createValveGeometry(
     }
   }
 
-  // Ear triangles
   const outerRingStart = 1 + (concentricSegments - 1) * radialSegments;
   for (let earIdx = 0; earIdx < 2; earIdx++) {
     const eIdx = earIdx === 0 ? earLeftIdx : earRightIdx;
@@ -147,68 +133,41 @@ function createValveGeometry(
   return geometry;
 }
 
-function createShellGeometry(params: ShellParams): THREE.BufferGeometry {
-  const topGeom = createValveGeometry(params, true);
-  const bottomGeom = createValveGeometry(params, false);
+function createValveMesh(
+  params: ShellParams,
+  isTop: boolean,
+): THREE.Mesh {
+  const geom = createValveGeometry(params, isTop);
 
-  const merged = new THREE.BufferGeometry();
-  const topPos = topGeom.getAttribute('position');
-  const botPos = bottomGeom.getAttribute('position');
-  const topIdx = topGeom.getIndex()!;
-  const botIdx = bottomGeom.getIndex()!;
+  // Apply vertex colors
+  const pos = geom.getAttribute('position');
+  const colors = new Float32Array(pos.count * 3);
 
-  const totalVerts = topPos.count + botPos.count;
-  const positions = new Float32Array(totalVerts * 3);
-  const colors = new Float32Array(totalVerts * 3);
-
-  // Top valve (left shell = deep crimson)
-  const topColor = new THREE.Color(0x8b1a1a);
-  const topColorLight = new THREE.Color(0xc75050);
-  for (let i = 0; i < topPos.count; i++) {
-    positions[i * 3] = topPos.getX(i);
-    positions[i * 3 + 1] = topPos.getY(i);
-    positions[i * 3 + 2] = topPos.getZ(i);
-
-    const dist = Math.sqrt(topPos.getX(i) ** 2 + topPos.getZ(i) ** 2) / params.radius;
-    const c = topColorLight.clone().lerp(topColor, dist * 0.8);
-    colors[i * 3] = c.r;
-    colors[i * 3 + 1] = c.g;
-    colors[i * 3 + 2] = c.b;
+  if (isTop) {
+    const topColor = new THREE.Color(0x8b1a1a);
+    const topColorLight = new THREE.Color(0xc75050);
+    for (let i = 0; i < pos.count; i++) {
+      const dist = Math.sqrt(pos.getX(i) ** 2 + pos.getZ(i) ** 2) / params.radius;
+      const c = topColorLight.clone().lerp(topColor, dist * 0.8);
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+    }
+  } else {
+    const botColor = new THREE.Color(0xfff5e0);
+    const botColorEdge = new THREE.Color(0xf0dbb8);
+    for (let i = 0; i < pos.count; i++) {
+      const dist = Math.sqrt(pos.getX(i) ** 2 + pos.getZ(i) ** 2) / params.radius;
+      const c = botColor.clone().lerp(botColorEdge, dist * 0.5);
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+    }
   }
 
-  // Bottom valve (right shell = yellowish white)
-  const botColor = new THREE.Color(0xfff5e0);
-  const botColorEdge = new THREE.Color(0xf0dbb8);
-  const offset = topPos.count;
-  for (let i = 0; i < botPos.count; i++) {
-    positions[(offset + i) * 3] = botPos.getX(i);
-    positions[(offset + i) * 3 + 1] = botPos.getY(i);
-    positions[(offset + i) * 3 + 2] = botPos.getZ(i);
+  geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
-    const dist = Math.sqrt(botPos.getX(i) ** 2 + botPos.getZ(i) ** 2) / params.radius;
-    const c = botColor.clone().lerp(botColorEdge, dist * 0.5);
-    colors[(offset + i) * 3] = c.r;
-    colors[(offset + i) * 3 + 1] = c.g;
-    colors[(offset + i) * 3 + 2] = c.b;
-  }
-
-  const topIndices = Array.from(topIdx.array);
-  const botIndices = Array.from(botIdx.array).map(i => i + offset);
-  const allIndices = [...topIndices, ...botIndices];
-
-  merged.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  merged.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  merged.setIndex(allIndices);
-  merged.computeVertexNormals();
-
-  topGeom.dispose();
-  bottomGeom.dispose();
-
-  return merged;
-}
-
-function createShellMaterial(): THREE.MeshPhysicalMaterial {
-  return new THREE.MeshPhysicalMaterial({
+  const material = new THREE.MeshPhysicalMaterial({
     vertexColors: true,
     clearcoat: 0.4,
     clearcoatRoughness: 0.15,
@@ -219,25 +178,128 @@ function createShellMaterial(): THREE.MeshPhysicalMaterial {
     sheenColor: new THREE.Color(0xffddcc),
     side: THREE.DoubleSide,
   });
+
+  const mesh = new THREE.Mesh(geom, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 export interface Shell {
-  mesh: THREE.Mesh;
+  mesh: THREE.Group;
+  topValve: THREE.Mesh;
+  bottomValve: THREE.Mesh;
+  topPivot: THREE.Group;
   rigidBody: RAPIER.RigidBody;
   params: ShellParams;
+  openAngle: number;
+  targetAngle: number;
+  settledTime: number;
+  /** Current top-valve collider (recreated as shell opens) */
+  topCollider: RAPIER.Collider | null;
+  /** Angle at which the top collider was last built */
+  colliderAngle: number;
 }
 
 export function createShell(): Shell {
   const params = generateParams();
-  const geometry = createShellGeometry(params);
-  const material = createShellMaterial();
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
 
-  // Create as kinematic initially; switched to dynamic on drop
+  const topValve = createValveMesh(params, true);
+  const bottomValve = createValveMesh(params, false);
+
+  // Top valve pivots at the hinge (back edge, +Z direction)
+  // Move top valve so hinge point is at origin of pivot group
+  const hingeOffset = params.radius * 0.9;
+  topValve.position.z = -hingeOffset;
+
+  const topPivot = new THREE.Group();
+  topPivot.position.z = hingeOffset; // Place pivot at hinge position
+  topPivot.add(topValve);
+
+  const mesh = new THREE.Group();
+  mesh.add(bottomValve);
+  mesh.add(topPivot);
+
   const rigidBody = createKinematicBody(0, 0, 0);
   addCylinderCollider(rigidBody, params.radius, params.bulgeHeight);
 
-  return { mesh, rigidBody, params };
+  return {
+    mesh,
+    topValve,
+    bottomValve,
+    topPivot,
+    rigidBody,
+    params,
+    openAngle: 0,
+    targetAngle: 0,
+    settledTime: 0,
+    topCollider: null,
+    colliderAngle: 0,
+  };
+}
+
+/** Maximum open angle in radians (~40 degrees) */
+const MAX_OPEN_ANGLE = Math.PI * 0.22;
+/** Time in seconds before the shell starts opening after being placed */
+const OPEN_DELAY = 1.5;
+/** How fast the shell opens (radians per second) */
+const OPEN_SPEED = 0.3;
+
+/** Minimum angle change before rebuilding the top collider */
+const COLLIDER_UPDATE_THRESHOLD = 0.03;
+
+/**
+ * Update the shell opening animation (visual only).
+ * Call each frame AFTER stepPhysics for settled shells.
+ */
+export function updateShellOpen(shell: Shell, dt: number) {
+  shell.settledTime += dt;
+
+  if (shell.settledTime > OPEN_DELAY) {
+    shell.targetAngle = Math.min(
+      MAX_OPEN_ANGLE,
+      (shell.settledTime - OPEN_DELAY) * OPEN_SPEED,
+    );
+  }
+
+  shell.openAngle += (shell.targetAngle - shell.openAngle) * 3.0 * dt;
+  shell.topPivot.rotation.x = shell.openAngle;
+}
+
+/**
+ * Sync the top-valve collider to match the current open angle.
+ * Removes the old collider and creates a new one at the correct position/rotation.
+ * Must be called BEFORE stepPhysics() to avoid Rapier borrow errors.
+ */
+export function syncTopCollider(shell: Shell) {
+  if (shell.openAngle < 0.01) return;
+  if (Math.abs(shell.openAngle - shell.colliderAngle) < COLLIDER_UPDATE_THRESHOLD) return;
+
+  // Remove old top collider
+  if (shell.topCollider) {
+    removeCollider(shell.topCollider);
+    shell.topCollider = null;
+  }
+
+  const angle = shell.openAngle;
+  const hinge = shell.params.radius * 0.9;
+  const r = shell.params.radius;
+  const bh = shell.params.bulgeHeight;
+
+  // Center of the rotated top valve disc
+  const cy = Math.sin(angle) * hinge * 0.5;
+  const cz = hinge - Math.cos(angle) * hinge * 0.5;
+
+  // Quaternion for rotation around local X axis
+  const halfA = angle / 2;
+
+  shell.topCollider = addCylinderColliderWithRotation(
+    shell.rigidBody,
+    r,
+    bh,
+    { x: 0, y: cy + bh, z: cz },
+    { x: Math.sin(halfA), y: 0, z: 0, w: Math.cos(halfA) },
+  );
+
+  shell.colliderAngle = angle;
 }

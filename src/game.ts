@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { createShell, Shell } from './shell';
+import { createShell, Shell, updateShellOpen, syncTopCollider } from './shell';
 import {
   removeRigidBody,
   registerPair,
@@ -246,34 +246,6 @@ function resetWander() {
   wander.speedZ3 = 0.15 + Math.random() * 0.25;
 }
 
-/** Update XZ wander position each frame */
-export function updateWander(dt: number) {
-  if (data.state !== 'PLACING' || !data.currentShell) return;
-
-  wander.angleX1 += wander.speedX1 * dt;
-  wander.angleZ1 += wander.speedZ1 * dt;
-  wander.angleX2 += wander.speedX2 * dt;
-  wander.angleZ2 += wander.speedZ2 * dt;
-  wander.angleX3 += wander.speedX3 * dt;
-  wander.angleZ3 += wander.speedZ3 * dt;
-
-  // Combine waves: primary + secondary (smaller) + slow drift
-  const x = (
-    Math.sin(wander.angleX1) * 0.55 +
-    Math.sin(wander.angleX2) * 0.25 +
-    Math.sin(wander.angleX3) * 0.20
-  ) * wander.range;
-  const z = (
-    Math.sin(wander.angleZ1) * 0.55 +
-    Math.sin(wander.angleZ2) * 0.25 +
-    Math.sin(wander.angleZ3) * 0.20
-  ) * wander.range;
-
-  const pos = data.currentShell.rigidBody.translation();
-  data.currentShell.rigidBody.setNextKinematicTranslation(
-    new RAPIER.Vector3(x, pos.y, z),
-  );
-}
 
 function bodySpeed(body: RAPIER.RigidBody): number {
   const v = body.linvel();
@@ -310,17 +282,49 @@ function isStable(): boolean {
 export function updateGame(dt: number) {
   if (data.state === 'TITLE' || data.state === 'GAME_OVER') return;
 
+  // 1. Update kinematic positions BEFORE physics step
+  if (data.state === 'PLACING' && data.currentShell) {
+    // Wander
+    wander.angleX1 += wander.speedX1 * dt;
+    wander.angleZ1 += wander.speedZ1 * dt;
+    wander.angleX2 += wander.speedX2 * dt;
+    wander.angleZ2 += wander.speedZ2 * dt;
+    wander.angleX3 += wander.speedX3 * dt;
+    wander.angleZ3 += wander.speedZ3 * dt;
+
+    const wx = (
+      Math.sin(wander.angleX1) * 0.55 +
+      Math.sin(wander.angleX2) * 0.25 +
+      Math.sin(wander.angleX3) * 0.20
+    ) * wander.range;
+    const wz = (
+      Math.sin(wander.angleZ1) * 0.55 +
+      Math.sin(wander.angleZ2) * 0.25 +
+      Math.sin(wander.angleZ3) * 0.20
+    ) * wander.range;
+
+    // Hover Y
+    const t = performance.now() * 0.001;
+    const baseY = data.highestY + SPAWN_HEIGHT_OFFSET;
+    const hy = baseY + Math.sin(t * 2) * 0.005;
+
+    data.currentShell.rigidBody.setNextKinematicTranslation(
+      new RAPIER.Vector3(wx, hy, wz),
+    );
+  }
+
+  // 2. Sync top-valve colliders to match open angle (before physics step)
+  for (const shell of data.shells) {
+    syncTopCollider(shell);
+  }
+
+  // 3. Physics step
   stepPhysics();
   syncMeshesToBodies();
 
-  // Hover animation while placing
-  if (data.state === 'PLACING' && data.currentShell) {
-    const t = performance.now() * 0.001;
-    const baseY = data.highestY + SPAWN_HEIGHT_OFFSET;
-    const pos = data.currentShell.rigidBody.translation();
-    data.currentShell.rigidBody.setNextKinematicTranslation(
-      new RAPIER.Vector3(pos.x, baseY + Math.sin(t * 2) * 0.005, pos.z),
-    );
+  // 3. Update shell opening AFTER physics step (collider updates)
+  for (const shell of data.shells) {
+    updateShellOpen(shell, dt);
   }
 
   if (data.state === 'DROPPING' || data.state === 'SETTLING') {
