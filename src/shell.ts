@@ -41,7 +41,10 @@ function createValveGeometry(
   const uvs: number[] = [];
   const indices: number[] = [];
 
-  vertices.push(0, sign * bulgeHeight, 0);
+  // Bottom valve (red) is flatter than top valve
+  const valveBulge = isTop ? bulgeHeight : bulgeHeight * 0.35;
+
+  vertices.push(0, sign * valveBulge, 0);
   uvs.push(0.5, 0.5);
 
   for (let ci = 1; ci <= concentricSegments; ci++) {
@@ -52,7 +55,7 @@ function createValveGeometry(
       const angle = (ri / radialSegments) * Math.PI * 2;
       const x = r * Math.cos(angle);
       const z = r * Math.sin(angle);
-      const dome = bulgeHeight * Math.cos((t * Math.PI) / 2) ** 1.8;
+      const dome = valveBulge * Math.cos((t * Math.PI) / 2) ** 1.8;
       const growthLine = Math.sin(t * Math.PI * 30) * 0.0002 * t;
       const y = sign * (dome + growthLine);
 
