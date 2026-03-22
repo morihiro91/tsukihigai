@@ -21,7 +21,7 @@ function randomInRange(min: number, max: number): number {
 }
 
 function generateParams(): ShellParams {
-  const scale = randomInRange(0.9, 1.1);
+  const scale = randomInRange(0.6, 1.8);
   return {
     radius: 0.045 * scale,
     bulgeHeight: 0.008 * scale,

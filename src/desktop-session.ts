@@ -16,7 +16,7 @@ export async function initDesktopSession() {
   // BBQ grill / konro
   const grillGroup = new THREE.Group();
 
-  const grillSize = 0.25;
+  const grillSize = 0.18;
   const grillHeight = 0.08;
   const wallThickness = 0.012;
 

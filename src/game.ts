@@ -174,8 +174,8 @@ function spawnShell() {
   const randomAngle = Math.random() * Math.PI * 2;
   const q = new RAPIER.Quaternion(0, Math.sin(randomAngle / 2), 0, Math.cos(randomAngle / 2));
 
-  const startX = (Math.random() - 0.5) * 0.2;
-  const startZ = (Math.random() - 0.5) * 0.2;
+  const startX = (Math.random() - 0.5) * 0.14;
+  const startZ = (Math.random() - 0.5) * 0.14;
   shell.rigidBody.setTranslation(new RAPIER.Vector3(startX, spawnY, startZ), true);
   shell.rigidBody.setRotation(q, true);
   shell.mesh.position.set(startX, spawnY, startZ);
@@ -227,7 +227,7 @@ const wander = {
   // Slow drift
   angleX3: 0, angleZ3: 0,
   speedX3: 0, speedZ3: 0,
-  range: 0.22,
+  range: 0.15,
 };
 
 /** Randomize wander parameters for a new shell */
